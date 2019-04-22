@@ -1,0 +1,1973 @@
+uses SysUtils, Classes, SettingsModule;
+var fearCastEndTime: Cardinal;
+SafeCastEndTime: Cardinal;
+ currentTarget: TL2Live;
+ 	previousTarget: TL2Live;
+ 	  iHater, iTargetBeforeHate: integer;
+	Hater: TL2Live;
+	TargetBeforeHate: TL2Live;
+	reskillRange:integer;
+	counter,List1B,List2B,List3B,List4B,List5B,List6B,WarB,assistB,SkillsToUseB:integer;
+	war1,war2,war3,blacklistAlly,maName:string;
+	targetStart : boolean = false;
+			autoTargetRange:integer;
+  eventsid : boolean = false;
+  blacklistid : boolean = false;
+  countid : boolean = false;
+  keyTimer: Cardinal;
+  keyClickedCount: integer;
+  highPrioritySkills: array of integer;
+  middlePrioritySkills: array of integer;
+  lowPrioritySkills: array of integer;
+  stealEffects: array of integer;
+  castEndTimeHigh, castEndTimeNormal, castEndTimeLow: cardinal;
+  isHighPrioritet: boolean;
+	isNormalPrioritet: boolean;
+	isLowPrioritet: boolean;
+	Settings: TSettings;
+	currentDay: TDateTime;
+	hp: Cardinal;
+	WhiteList: array of string;
+	SkillsToUse: array of integer;
+	List6: array of integer;
+	List5: array of integer;
+	List4: array of integer;
+	List3: array of integer;
+	List2: array of integer;
+	List1: array of integer;
+  reskillSkill: integer;
+	interruptID: integer;
+  reset1:integer;
+  count:integer;
+  qitem: TL2Item;
+  item: TL2Item;
+  itemID:integer;
+  //const
+  //ItemID = 10226;  // Icarus bow
+  //ItemID = 15859;  // Skull Edge Bow
+(* *********************************************************************************************************************************** *)
+function GetKeyState(nVirtKey: integer): byte; stdcall;
+ external 'user32.dll' name 'GetKeyState' ;
+
+(* *********************************************************************************************************************************** *)
+
+function isAgred(obj: TL2Live): boolean;
+var
+	buffsTemp: TL2Effect;
+begin
+	Result := obj.Buffs.ByID(18, buffsTemp) or
+	obj.Buffs.ByID(28, buffsTemp); 
+end;
+(* *********************************************************************************************************************************** *)
+function isAffraid(obj: TL2Live): boolean;
+var
+	buffsTemp: tl2effect;
+begin
+	 Result := obj.Buffs.ByID(1169, buffsTemp) // curse fear
+			or obj.Buffs.ByID(1092, buffsTemp) // wark fear
+			or obj.Buffs.ByID(1381, buffsTemp) // mass fear
+			or obj.Buffs.ByID(763, buffsTemp);  // heal scream
+end;
+(* *********************************************************************************************************************************** *)
+ function isFearCasting(enemy: TL2Live): boolean;
+			begin
+				if (enemy.Cast.EndTime > 0) and (enemy.Target = User) then
+				begin
+					if (enemy.Cast.ID = 1169) then
+						begin
+							fearCastEndTime := enemy.Cast.EndTime;
+							isFearCasting := true
+						end	
+					else
+						isFearCasting := false
+					end
+				else
+				isFearCasting := false;
+			end;
+
+(* *********************************************************************************************************************************** *)
+function shouldCast(obj: TL2Live; hp: Cardinal; range: Cardinal): boolean;
+var
+	buffsTemp: TL2Effect;
+begin
+	Result := not User.Dead 
+	and (User.HP > hp) 
+	and not obj.Dead
+ // and not isSilenced(User) 
+ // and not isDisabled(User)
+	//and not isInvincible(User)
+	//and (User.Cast.EndTime = 0)
+	and (User.DistTo(obj) < range)
+ // and not (obj.team=user.team)
+	and ((obj.attackable) or (obj.clan=war1)
+	or (obj.clan=war2) or (obj.clan=war3));
+	
+end;
+(* *********************************************************************************************************************************** *)
+ function isMedused(obj: TL2Live): boolean;
+var
+ buffsTemp: tl2effect;
+begin
+	Result := (obj.abnormalid = 2048) or
+	obj.Buffs.ByID(367, buffsTemp);
+end; 		
+(* *********************************************************************************************************************************** *)
+function isInvincible(obj: TL2Live): boolean;
+var
+	buffsTemp: TL2Effect;
+begin
+	Result := obj.Buffs.ByID(1418, buffsTemp) or obj.Buffs.ByID(1427, buffsTemp) or
+		obj.Buffs.ByID(1505, buffsTemp) or obj.Buffs.ByID(3158, buffsTemp) or
+	(*	obj.Buffs.ByID(655, buffsTemp) or*)(* obj.Buffs.ByID(5576, buffsTemp) or *)
+		obj.Buffs.ByID(1540, buffsTemp) or obj.Buffs.ByID(837, buffsTemp);
+end;
+(* *********************************************************************************************************************************** *)
+ function skillCoolTime(ID: integer): integer;
+var
+    skill: TL2Skill;
+begin
+    if Skilllist.byID(id, skill) then
+        Result := skill.Endtime
+    else  
+        Result := -1;  
+end;
+(* *********************************************************************************************************************************** *)
+ function skillExist(ID: integer): boolean;
+var
+    skill: TL2Skill;
+begin
+ if Skilllist.byID(id, skill) then
+result := true
+else
+result := false;
+   
+    
+end;
+ (* *********************************************************************************************************************************** *)
+ function isContains(arr: array of integer; val: integer): boolean;
+var
+  i: integer;
+begin
+  Result := false;
+  
+  if Length(arr) = 0 then
+    exit;
+
+  for i:=0 to Length(arr)-1 do
+  begin
+    if (arr[i] = val) then
+    begin
+      Result := true;
+      exit;
+    end;
+  end;
+end;	(* *********************************************************************************************************************************** *)
+function isContains_2(arr: array of string; val: string): boolean;
+var
+  i: integer;
+begin
+  Result := false;
+  
+  if Length(arr) = 0 then
+    exit;
+
+  for i:=0 to Length(arr)-1 do
+  begin
+    if (arr[i] = val) then
+    begin
+      Result := true;
+      exit;
+    end;
+  end;
+end;	(* *********************************************************************************************************************************** *)
+
+	 function KeyDown(K : byte) : Boolean;
+ begin
+Result := (K = 128) or (K = 129)
+ end;
+ function OOO : boolean;
+ begin
+ Result := KeyDown(GetKeyState(79));
+ end;
+  function PPP : boolean;
+ begin
+ Result := KeyDown(GetKeyState(80));
+ end;
+   function AAA : boolean;
+ begin
+ Result := KeyDown(GetKeyState(75));
+ end;
+   function BBB : boolean;
+ begin
+ Result := KeyDown(GetKeyState(76));
+ end;
+  function CTRL : boolean;
+ begin
+ Result := KeyDown(GetKeyState($11));
+ end;
+ function ZZZ : boolean;
+ begin
+ Result := KeyDown(GetKeyState(90));
+ end;
+ function COMMA : boolean;
+ begin
+ Result := KeyDown(GetKeyState(188));
+ end;
+ function DOT : boolean;
+ begin
+ Result := KeyDown(GetKeyState(190));
+ end;
+(* *********************************************************************************************************************************** *) 	
+function isInterrupted(obj: TL2Live; _castEndTime: Cardinal): boolean;
+begin
+	Result := (obj.Cast.EndTime = 0) and (GetTickCount < _castEndTime);
+end;
+
+function shouldInterruptHigh(obj: TL2Live): boolean;
+begin
+	if (obj.Cast.EndTime > 0) then
+	begin
+		if isContains(highPrioritySkills, obj.Cast.ID) then
+			begin
+				castEndTimeHigh := GetTickCount + obj.Cast.EndTime;
+				isHighPrioritet := true;
+				Result := true;
+			end;
+	end
+	else
+	Result := false;
+end;
+(* *********************************************************************************************************************************** *)
+function shouldInterruptNormal(obj: TL2Live): boolean;
+begin
+	if (obj.Cast.EndTime > 550) then
+	begin
+		if isContains(middlePrioritySkills, obj.Cast.ID) then
+			begin
+				castEndTimeNormal := GetTickCount + obj.Cast.EndTime;
+				isNormalPrioritet := true;
+				Result := true;
+			end;
+	end
+	else
+	Result := false;
+end;
+(* *********************************************************************************************************************************** *)
+function shouldInterruptLow(obj: TL2Live): boolean;		
+begin
+	if (obj.Cast.EndTime > 550) then
+	begin
+		if isContains(lowPrioritySkills, obj.Cast.ID) then
+			begin
+				castEndTimeLow := GetTickCount + obj.Cast.EndTime;
+				isLowPrioritet := true;
+				Result := true;
+			end;
+	end
+	else
+	Result := false;
+end;
+(* *********************************************************************************************************************************** *)
+function getArray(param: string): array of integer;
+var
+	sl:TStringList;
+	i: integer;
+	resStr: string;
+begin
+	sl := TStringList.Create;
+	Settings.SetFile(Script.Path + User.Name + '_Settings.ini');
+	resStr := Settings.Load('Skills', param, '0;0');
+  try
+    sl.Delimiter     := ';';
+    sl.DelimitedText := resStr;
+    SetLength(Result, sl.Count);
+    for i:=0 to sl.count-1 do
+		  Result[i] := StrToInt(sl[i]);
+
+  finally
+    sl.Free;
+  end;
+end;
+(* *********************************************************************************************************************************** *)
+function getArray_2(param: string): array of string;
+var
+	s2:TStringList;
+	k: integer;
+	resStr2: string;
+begin
+	s2 := TStringList.Create;
+	Settings.SetFile(Script.Path + 'Kostas.ini');
+	resStr2 := Settings.Load('Params', param, '0;0');
+  try
+    s2.Delimiter     := ';';
+    s2.DelimitedText := resStr2;
+    SetLength(Result, s2.Count);
+    for k:=0 to s2.count-1 do
+		  Result[k] := string(s2[k]);
+
+  finally
+    s2.Free;
+  end;
+end;
+(* *********************************************************************************************************************************** *)
+			procedure loadConfig; //
+var
+  MySet: TSettings;
+begin
+	MySet.SetFile(Script.Path + 'Kostas.ini');
+
+	itemID := MySet.Load('Params', 'item ID', 0);
+	reskillSkill := MySet.Load('Params', 'resKill Skill', 0);
+	reskillRange := MySet.Load('Params', 'resKill Range', 0);
+	WarB := MySet.Load('Params', 'War Button', 0);
+	SkillsToUseB := MySet.Load('Params', 'SkillsToUse Button', 0);
+	List6B := MySet.Load('Params', 'List6 Button', 0);
+	List5B := MySet.Load('Params', 'List5 Button', 0);
+	List4B := MySet.Load('Params', 'List4 Button', 0);
+	List3B := MySet.Load('Params', 'List3 Button', 0);
+	List2B := MySet.Load('Params', 'List2 Button', 0);
+	List1B := MySet.Load('Params', 'List1 Button', 0);
+	assistB := MySet.Load('Params', 'assist Button', 0);
+	interruptID := MySet.Load('Params', 'interrupt Skill', 0);
+	war1 := MySet.Load('Params', 'war1 name', 'ClanName');
+  war2 := MySet.Load('Params', 'war2 name', 'ClanName');
+  war3 := MySet.Load('Params', 'war3 name', 'ClanName');
+  blacklistAlly := MySet.Load('Params', 'blacklistAlly name', 'AllyName');
+  maName := MySet.Load('Params', 'MA name', 'NickName');
+   autoTargetRange := MySet.Load('Params', 'autoTarget Range', 0);
+  // eventsid := MySet.Load('Params', 'events ', 0);
+
+end;
+(* *********************************************************************************************************************************** *)
+procedure loadSettings;
+begin
+  highPrioritySkills := getArray('High Priority');
+  middlePrioritySkills := getArray('Middle Priority');
+  lowPrioritySkills := getArray('Low Priority');
+  WhiteList := getArray_2('Whitelisted Names');
+  SkillsToUse := getArray('List of Skills to Use');
+  List1 := getArray('Classes from 1st list');
+  List2 := getArray('Classes from 2nd list');
+  List3 := getArray('Classes from 3rd list');
+  List4 := getArray('Classes from 4th list');
+  List5 := getArray('Classes from 5th list');
+  List6 := getArray('Classes from 6th list');
+  print('High priority skills count: ' + inttostr(Length(highPrioritySkills)));
+  print('Middle priority skills count: ' + inttostr(Length(middlePrioritySkills)));
+  print('Low priority skills count: ' + inttostr(Length(lowPrioritySkills)));
+  print('Number of Skills To Use: ' + inttostr(Length(SkillsToUse)));
+  counter:=Length(SkillsToUse)+1;
+  print('Number of Classes from 6th list: ' + inttostr(Length(List6)));
+  print('Number of Classes from 5th list: ' + inttostr(Length(List5)));
+  print('Number of Classes from 4th list: ' + inttostr(Length(List4)));
+  print('Number of Classes from 3rd list: ' + inttostr(Length(List3)));
+  print('Number of Classes from 2nd list: ' + inttostr(Length(List2)));
+  print('Number of Classes from 1st list: ' + inttostr(Length(List1)));
+  print('Whitelisted Names: ' + inttostr(Length(WhiteList)));
+  print('------------------------------------------------------------------');
+  print('                Created by Software                               ');
+  print('------------------------------------------------------------------');
+ 
+  end;
+(* *********************************************************************************************************************************** *)
+                             
+procedure Disarm;
+var
+  item: TL2Item;
+
+begin
+while Engine.Status = lsOnline do
+	begin
+    if inventory.user.byid(itemID, item) and not (item.Equipped)
+      then
+       begin
+          Engine.UseItem(itemID);
+          delay(User.Cast.EndTime+150);
+  end;
+end;
+end;
+
+procedure InterruptHigh;
+var
+	i: integer;
+	actor: TL2Live;
+	castID: integer;
+begin
+while Engine.Status = lsOnline do
+	begin
+	for i:=0 to Charlist.Count - 1 do
+	begin
+	if shouldInterruptHigh(Charlist.Items(i)) and shouldCast(Charlist.Items(i), 30, 850)and not eventsid then
+		begin
+			actor := Charlist.Items(i);
+			castID := actor.Cast.ID;
+			//if (User.Target <> actor) then
+			while
+			not isInterrupted(actor, castEndTimeHigh)
+			and (actor.Cast.EndTime <> 0)
+			and not actor.Dead and (actor.Cast.ID = castID)
+			and shouldCast(Charlist.Items(i), 30, 850) do
+			begin
+			if ((skillCoolTime(interruptID)<>-1) and skillExist(interruptID)) then begin 
+			if (User.Cast.EndTime=0) then begin
+			engine.settarget(actor);
+			engine.DUseSkill(interruptID, true, true);
+			end
+			else begin
+			Engine.UseKey('Esc');
+			if User.target<>actor then begin
+			engine.settarget(actor);
+			engine.DUseSkill(interruptID, true, true);
+			end
+			else begin
+			engine.settarget(user);
+			engine.settarget(actor);
+			engine.DUseSkill(interruptID, true, true);
+			end;
+			end;
+		end;
+				delay(10);
+			end;
+
+			isHighPrioritet := false;
+		end;
+	end;
+	delay(100);
+end;
+end;
+(* *********************************************************************************************************************************** *)
+
+procedure InterruptNormal;
+var
+	i: integer;
+	actor: TL2Live;
+	castID: integer;
+begin
+while Engine.Status = lsOnline do
+	begin
+	for i:=0 to Charlist.Count - 1 do
+	begin
+	if shouldInterruptNormal(Charlist.Items(i)) and shouldCast(Charlist.Items(i), 30, 700) and not isHighPrioritet and not eventsid then
+		begin
+			actor := Charlist.Items(i);
+			castID := actor.Cast.ID;
+			//if (User.Target <> actor) then
+			while
+			not isInterrupted(actor, castEndTimeHigh)
+			and (actor.Cast.EndTime <> 0)
+			and not actor.Dead and (actor.Cast.ID = castID)
+			and shouldCast(Charlist.Items(i), 30, 850) do
+			begin
+			if ((skillCoolTime(interruptID)<>-1) and skillExist(interruptID)) then begin 
+			if (User.Cast.EndTime=0) then begin
+			engine.settarget(actor);
+			engine.DUseSkill(interruptID, true, true);
+			end
+			else
+			begin
+			Engine.UseKey('Esc');
+			if User.target<>actor then begin
+			engine.settarget(actor);
+			engine.DUseSkill(interruptID, true, true);
+			end
+			else begin
+			engine.settarget(user);
+			engine.settarget(actor);
+			engine.DUseSkill(interruptID, true, true);
+			end;
+			end;
+		end;
+			delay(10);
+			end;
+			isNormalPrioritet := false;
+		end;
+	end;
+	delay(100);
+end;
+end;
+(* *********************************************************************************************************************************** *)
+procedure InterruptLow;
+var
+	i: integer;
+	actor: TL2Live;
+	castID: integer;
+begin
+while Engine.Status = lsOnline do
+	begin
+	for i:=0 to Charlist.Count - 1 do
+	begin
+	if shouldInterruptLow(Charlist.Items(i)) and shouldCast(Charlist.Items(i), 30, 700)and not eventsid then
+		begin
+			actor := Charlist.Items(i);
+			castID := actor.Cast.ID;
+			//if (User.Target <> actor) then
+				Engine.SetTarget(actor);
+			while
+			not isInterrupted(actor, castEndTimeLow)
+			and (actor.Cast.EndTime <> 0)
+			and not actor.Dead and (actor.Cast.ID = castID)
+			and not isHighPrioritet and not isNormalPrioritet
+			and ShouldCast(Charlist.Items(i), 30, 700) do
+			begin
+			if ((skillCoolTime(interruptID)<>-1) and skillExist(interruptID)) then begin 
+			if (User.Cast.EndTime=0) then begin
+			engine.settarget(actor);
+			engine.DUseSkill(interruptID, true, true);
+			end
+			else
+			begin
+			Engine.UseKey('Esc');
+			if User.target<>actor then begin
+			engine.settarget(actor);
+			engine.DUseSkill(interruptID, true, true);
+			end
+			else begin
+			engine.settarget(user);
+			engine.settarget(actor);
+			engine.DUseSkill(interruptID, true, true);
+			end;
+			end;
+		end;
+				delay(10);
+			end;
+			isLowPrioritet := false;
+		end;
+	end;
+end;
+end;
+(* *********************************************************************************************************************************** *)
+
+procedure CardiStart (p: pointer);
+var
+keycode:integer;
+begin
+  while true do
+  begin
+  delay(500);
+    if  (*CTRL and *)OOO   then begin     //
+  Print('>AutoTarget - ON.');
+      targetStart := true;
+      delay(1000);
+      end;
+      
+    if  (*CTRL and*) PPP then begin //
+  Print('>AutoTarget - OFF.');  
+      targetStart := false;
+      delay(1000);
+  end;  
+end;  end;
+(* *********************************************************************************************************************************** *)
+
+procedure eventsStart (p: pointer);
+var
+keycode:integer;
+begin
+  while true do
+  begin
+  delay(500);
+    if  (*CTRL and *)AAA   then begin     //
+  Print('>Events - ON.');
+      eventsid := true;
+      delay(1000);
+      end;
+      
+    if  (*CTRL and*) BBB then begin //
+  Print('>Events - OFF.');  
+      eventsid := false;
+      delay(1000);
+  end;  
+end;  end;
+ (* *********************************************************************************************************************************** *)
+ procedure BlacklistStart (p: pointer);
+var
+keycode:integer;
+begin
+  while true do
+  begin
+  delay(500);
+    if  (*CTRL and *)COMMA then begin     //
+  Print('>Blacklist - ON.');
+      blacklistid := true;
+      eventsid := false;
+      delay(1000);
+      end;
+      
+    if  (*CTRL and*) DOT then begin //
+  Print('>Blacklist - OFF.');  
+      blacklistid := false;
+      delay(1000);
+  end;  
+end;  end;
+ (* *********************************************************************************************************************************** *)
+
+procedure WarCount (p: pointer);
+var
+keycode:integer;
+begin
+  while true do
+  begin
+  delay(500);
+    if  (*CTRL and *)ZZZ and not eventsid  then begin     //
+  Print('>Counting Wars in 3200 range.');
+      countid := true;
+      delay(1000);
+      end;
+    if  (*CTRL and *)ZZZ and eventsid  then begin
+  Print('> WarCount in Events is not needed :) First de-activate event option an try again! ');
+      end;
+end;  end;
+ (* *********************************************************************************************************************************** *)
+procedure autoTarget;
+var
+	Action : TL2Action;
+keycode,j,i,m,k,card:integer;
+char2,char3,charcardi:tl2char;
+begin
+
+while (engine.status=lsonline)  do begin
+
+if  (User.Target.Dead) and not (user.target=nil) (*and (User.HP > hp)*)  and targetStart and not eventsid  then begin
+for j := 0 to CharList.count -1 do begin
+char2 := CharList.Items(j);
+
+
+if ((( isContains(list6, char2.classid  ) or isContains(list5, char2.classid  )or isContains(list4, char2.classid  )or isContains(list3, char2.classid) or isContains(list2, char2.classid  ) or isContains(list1, char2.classid  ))  and ((char2.attackable) or (char2.clan=war1)or (char2.clan=war2)or (char2.clan=war3))) and not (char2.dead) and not (isMedused(char2)) and not (user.target=char2) (*and (user.distto(char2)<=autoTargetRange)*)(*and not (char2.team=user.team)*))then
+begin
+delay(100);
+engine.settarget(char2);
+break
+
+
+end;
+end; 
+end;
+delay(100);
+end;
+end;
+ (* *********************************************************************************************************************************** *)
+ procedure autoTarget2;
+var
+	Action : TL2Action;
+keycode,j,i,m,k,card:integer;
+char2,char3,charcardi:tl2char;
+begin
+
+while (engine.status=lsonline)  do begin
+
+if (User.Target.Dead) and not (user.target=nil) and (User.HP > hp)  and (targetStart) and (eventsid)  then begin
+for j := 0 to CharList.count -1 do begin
+char2 := CharList.Items(j);
+
+
+if ((isContains(list6, char2.classid) or isContains(list5, char2.classid) or isContains(list4, char2.classid) or isContains(list3, char2.classid) or isContains(list2, char2.classid) or isContains(list1, char2.classid  ))  and (char2.attackable) and not (char2.dead)and not (isMedused(char2)) and not (user.target=char2) (*and (user.distto(char2)<=autoTargetRange)*)(*and not (char2.namecolor=user.namecolor)*))then
+begin
+delay(100);
+engine.settarget(char2);
+break
+
+
+end;
+end; 
+end;
+delay(100);
+end;
+end;
+
+(* *********************************************************************************************************************************** *)
+procedure autoTarget3;
+var
+	Action : TL2Action;
+keycode,j,i,m,k,card:integer;
+char2,char3,charcardi:tl2char;
+begin
+
+while (engine.status=lsonline)  do begin
+
+if (User.Target.Dead) and not (user.target=nil) (*and (User.HP > hp)*)  and (targetStart) and not (eventsid) and (blacklistid) then begin
+for j := 0 to CharList.count -1 do begin
+char2 := CharList.Items(j);
+
+
+if ( (isContains(list6, char2.classid) or isContains(list5, char2.classid) or isContains(list4, char2.classid) or isContains(list3, char2.classid) or isContains(list2, char2.classid) or isContains(list1, char2.classid  )) and not (isContains_2(WhiteList, char2.name)) and (char2.ally=blacklistAlly) and not (char2.dead) and not (isMedused(char2)) and not (user.target=char2))then
+begin
+delay(100);
+engine.settarget(char2);
+break
+
+
+end;
+end; 
+end;
+delay(100);
+end;
+end;
+
+(* *********************************************************************************************************************************** *)
+ 
+procedure AntiBack;
+var
+char2: tl2char;
+i: integer;
+begin
+while true do begin
+for i := 0 to CharList.count -1 do begin
+Char2 := CharList.Items(i);
+if (char2.cast.endtime > 0) and
+   (User.DistTo(char2)<100) and
+   (char2.cast.id=30) and
+   not (char2.dead) and 
+   (User.DistTo(char2)<100)
+   and (char2.target=User)
+    then begin
+    engine.moveto(char2.x,char2.y, char2.z);
+//Engine.SetTarget(char2.name);
+//Engine.USeSkill(1184,true);  ///change skill id
+end;
+end;
+delay(100);
+end;
+end;
+
+
+(* *********************************************************************************************************************************** *)
+ procedure assist; 
+var
+  KeyCode, i : integer;
+  n : single;
+  char1,char2 : tl2live;
+  obj:tl2char;
+begin
+while true do  begin
+ delay(50);
+Engine.WaitAction([lakey], KeyCode, i);        
+if  (KeyCode = assistB)  //tab
+then begin
+engine.assist(maName);
+end;
+end;
+end;
+
+(* *********************************************************************************************************************************** *)
+procedure SkillList (p: pointer);        
+var
+i,keycode:integer;
+
+begin
+  while engine.status=lsonline do begin    
+    Engine.WaitAction([laKey],keycode,i);
+if (KeyCode = SkillsToUseB)  then begin
+for i:=0 to counter  do begin
+    Engine.DUseSkill(SkillsToUse(i), true, true);
+    delay(15);
+end;
+end;
+end;    
+end;
+(* *********************************************************************************************************************************** *)
+procedure targetList6 (p: pointer);        
+var
+keycode,j,i,m,k:integer;
+char2,char3:tl2char;
+previousTarget1,previousTarget2:tl2live;
+begin
+  while engine.status=lsonline do begin    
+    Engine.WaitAction([laKey],keycode,i);
+if (KeyCode = List6B) (* Q *)and not eventsid and not blacklistid then begin
+count:=1;
+for j := 0 to CharList.count -1 do begin
+Char2 := CharList.Items(j);
+if ( (isContains(list6, char2.classid  ) )
+    and ((char2.attackable) or (char2.clan=war1)or (char2.clan=war2)or (char2.clan=war3)))and not (char2.dead) and not (isMedused(char2))  and not (user.target=char2)
+then
+begin
+count:=count+1;
+end;
+end;
+for j := 0 to CharList.count -1 do begin
+Char2 := CharList.Items(j);
+if (count>2) then begin
+if ( (isContains(list6, char2.classid  ) )
+    and ((char2.attackable) or (char2.clan=war1)or (char2.clan=war2)or (char2.clan=war3)))and not (char2.dead) and not (isMedused(char2))  and not (user.target=char2)and not (previousTarget1=char2)
+then
+begin
+Engine.Settarget(char2);
+if reset1=0 then begin
+previousTarget1:=user.target;       end;
+reset1:=reset1+1;
+if reset1=2 then reset1:=0;
+break;
+end;
+end;
+if (count<3) then begin
+if ( (isContains(list6, char2.classid  ) )
+    and ((char2.attackable) or (char2.clan=war1)or (char2.clan=war2)or (char2.clan=war3)))and not (char2.dead) and not (isMedused(char2))  and not (user.target=char2)
+then
+begin
+Engine.Settarget(char2);
+break;
+end;
+end;
+end;
+end;
+end;
+end;
+(* *********************************************************************************************************************************** *)
+procedure targetList6_2 (p: pointer);        
+var
+keycode,j,i,m,k:integer;
+char2,char3:tl2char;
+previousTarget1,previousTarget2:tl2live;
+begin
+  while engine.status=lsonline do begin    
+    Engine.WaitAction([laKey],keycode,i);
+if (KeyCode = List6B) (* Q *)and eventsid then begin
+count:=1;
+for j := 0 to CharList.count -1 do begin
+Char2 := CharList.Items(j);
+if ( (isContains(list6, char2.classid  ) )
+    and ((char2.attackable)))and not (char2.dead) and not (isMedused(char2))  and not (user.target=char2)
+then
+begin
+count:=count+1;
+end;
+end;
+for j := 0 to CharList.count -1 do begin
+Char2 := CharList.Items(j);
+if (count>2) then begin
+if ( (isContains(list6, char2.classid  ) )
+    and ((char2.attackable)))and not (char2.dead) and not (isMedused(char2))  and not (user.target=char2)and not (previousTarget1=char2)
+then
+begin
+Engine.Settarget(char2);
+if reset1=0 then begin
+previousTarget1:=user.target;       end;
+reset1:=reset1+1;
+if reset1=2 then reset1:=0;
+break;
+end;
+end;
+if (count<3) then begin
+if ( (isContains(list6, char2.classid  ) )
+    and ((char2.attackable)))and not (char2.dead) and not (isMedused(char2))  and not (user.target=char2)
+then
+begin
+Engine.Settarget(char2);
+break;
+end;
+end;
+end;
+end;
+end;
+end;
+(* *********************************************************************************************************************************** *)
+procedure targetList6_3 (p: pointer);        
+var
+keycode,j,i,m,k:integer;
+char2,char3:tl2char;
+previousTarget1,previousTarget2:tl2live;
+begin
+  while engine.status=lsonline do begin    
+    Engine.WaitAction([laKey],keycode,i);
+if (KeyCode = List6B) (* Q *) and not (eventsid) and (blacklistid) then begin
+count:=1;
+for j := 0 to CharList.count -1 do begin
+Char2 := CharList.Items(j);
+if  (isContains(list6, char2.classid)
+    and (char2.ally=blacklistAlly) and not (isContains_2(WhiteList, char2.name)) and not (char2.dead)and not (isMedused(char2))and not (char2.ismember) and not (user.target=char2))
+then
+begin
+count:=count+1;
+end;
+end;
+for j := 0 to CharList.count -1 do begin
+Char2 := CharList.Items(j);
+if (count>2) then begin
+if (isContains(list6, char2.classid  )
+    and (char2.ally=blacklistAlly) and not (isContains_2(WhiteList, char2.name)) and not (char2.dead) and not (isMedused(char2))  and not (user.target=char2) and not (previousTarget1=char2))
+then
+begin
+Engine.Settarget(char2);
+if reset1=0 then begin
+previousTarget1:=user.target;       end;
+reset1:=reset1+1;
+if reset1=2 then reset1:=0;
+break;
+end;
+end;
+if (count<3) then begin
+if ( (isContains(list6, char2.classid))
+    and (char2.ally=blacklistAlly)) and not (isContains_2(WhiteList, char2.name)) and not (char2.dead) and not (isMedused(char2))  and not (user.target=char2)
+then
+begin
+Engine.Settarget(char2);
+break;
+end;
+end;
+end;
+end;
+end;
+end;
+(* *********************************************************************************************************************************** *)
+
+procedure targetList5 (p: pointer);        
+var
+keycode,j,i,m,k:integer;
+char2,char3:tl2char;
+previousTarget1,previousTarget2:tl2live;
+begin
+  while engine.status=lsonline do begin    
+    Engine.WaitAction([laKey],keycode,i);
+if (KeyCode = List5B) (* Q *)and not eventsid and not blacklistid then begin
+count:=1;
+for j := 0 to CharList.count -1 do begin
+Char2 := CharList.Items(j);
+if ( (isContains(list5, char2.classid  ) )
+    and ((char2.attackable) or (char2.clan=war1)or (char2.clan=war2)or (char2.clan=war3)))and not (char2.dead) and not (isMedused(char2))  and not (user.target=char2)
+then
+begin
+count:=count+1;
+end;
+end;
+for j := 0 to CharList.count -1 do begin
+Char2 := CharList.Items(j);
+if (count>2) then begin
+if ( (isContains(list5, char2.classid  ) )
+    and ((char2.attackable) or (char2.clan=war1)or (char2.clan=war2)or (char2.clan=war3)))and not (char2.dead) and not (isMedused(char2))  and not (user.target=char2)and not (previousTarget1=char2)
+then
+begin
+Engine.Settarget(char2);
+if reset1=0 then begin
+previousTarget1:=user.target;       end;
+reset1:=reset1+1;
+if reset1=2 then reset1:=0;
+break;
+end;
+end;
+if (count<3) then begin
+if ( (isContains(list5, char2.classid  ) )
+    and ((char2.attackable) or (char2.clan=war1)or (char2.clan=war2)or (char2.clan=war3)))and not (char2.dead) and not (isMedused(char2))  and not (user.target=char2)
+then
+begin
+Engine.Settarget(char2);
+break;
+end;
+end;
+end;
+end;
+end;
+end;
+(* *********************************************************************************************************************************** *)
+procedure targetList5_2 (p: pointer);        
+var
+keycode,j,i,m,k:integer;
+char2,char3:tl2char;
+previousTarget1,previousTarget2:tl2live;
+begin
+  while engine.status=lsonline do begin    
+    Engine.WaitAction([laKey],keycode,i);
+if (KeyCode = List5B) (* Q *)and eventsid then begin
+count:=1;
+for j := 0 to CharList.count -1 do begin
+Char2 := CharList.Items(j);
+if ( (isContains(list5, char2.classid  ) )
+    and ((char2.attackable)))and not (char2.dead) and not (isMedused(char2))  and not (user.target=char2)
+then
+begin
+count:=count+1;
+end;
+end;
+for j := 0 to CharList.count -1 do begin
+Char2 := CharList.Items(j);
+if (count>2) then begin
+if ( (isContains(list5, char2.classid  ) )
+    and ((char2.attackable)))and not (char2.dead) and not (isMedused(char2))  and not (user.target=char2)and not (previousTarget1=char2)
+then
+begin
+Engine.Settarget(char2);
+if reset1=0 then begin
+previousTarget1:=user.target;       end;
+reset1:=reset1+1;
+if reset1=2 then reset1:=0;
+break;
+end;
+end;
+if (count<3) then begin
+if ( (isContains(list5, char2.classid  ) )
+    and ((char2.attackable)))and not (char2.dead) and not (isMedused(char2))  and not (user.target=char2)
+then
+begin
+Engine.Settarget(char2);
+break;
+end;
+end;
+end;
+end;
+end;
+end;
+(* *********************************************************************************************************************************** *)
+procedure targetList5_3 (p: pointer);        
+var
+keycode,j,i,m,k:integer;
+char2,char3:tl2char;
+previousTarget1,previousTarget2:tl2live;
+begin
+  while engine.status=lsonline do begin    
+    Engine.WaitAction([laKey],keycode,i);
+if (KeyCode = List5B) (* Q *) and not (eventsid) and (blacklistid) then begin
+count:=1;
+for j := 0 to CharList.count -1 do begin
+Char2 := CharList.Items(j);
+if  (isContains(list5, char2.classid)
+    and (char2.ally=blacklistAlly) and not (isContains_2(WhiteList, char2.name)) and not (char2.dead)and not (isMedused(char2))and not (char2.ismember) and not (user.target=char2))
+then
+begin
+count:=count+1;
+end;
+end;
+for j := 0 to CharList.count -1 do begin
+Char2 := CharList.Items(j);
+if (count>2) then begin
+if (isContains(list5, char2.classid  )
+    and (char2.ally=blacklistAlly) and not (isContains_2(WhiteList, char2.name)) and not (char2.dead) and not (isMedused(char2))  and not (user.target=char2)and not (previousTarget1=char2))
+then
+begin
+Engine.Settarget(char2);
+if reset1=0 then begin
+previousTarget1:=user.target;       end;
+reset1:=reset1+1;
+if reset1=2 then reset1:=0;
+break;
+end;
+end;
+if (count<3) then begin
+if ( (isContains(list5, char2.classid))
+    and (char2.ally=blacklistAlly)) and not (isContains_2(WhiteList, char2.name)) and not (char2.dead) and not (isMedused(char2))  and not (user.target=char2)
+then
+begin
+Engine.Settarget(char2);
+break;
+end;
+end;
+end;
+end;
+end;
+end;
+(* *********************************************************************************************************************************** *)
+procedure targetList4 (p: pointer);        
+var
+keycode,j,i,m,k:integer;
+char2,char3:tl2char;
+previousTarget1,previousTarget2:tl2live;
+begin
+  while engine.status=lsonline do begin    
+    Engine.WaitAction([laKey],keycode,i);
+if (KeyCode = List4B) (* Q *)and not eventsid and not blacklistid then begin
+count:=1;
+for j := 0 to CharList.count -1 do begin
+Char2 := CharList.Items(j);
+if ( (isContains(list4, char2.classid  ) )
+    and ((char2.attackable) or (char2.clan=war1)or (char2.clan=war2)or (char2.clan=war3)))and not (char2.dead) and not (isMedused(char2))  and not (user.target=char2)
+then
+begin
+count:=count+1;
+end;
+end;
+for j := 0 to CharList.count -1 do begin
+Char2 := CharList.Items(j);
+if (count>2) then begin
+if ( (isContains(list4, char2.classid  ) )
+    and ((char2.attackable) or (char2.clan=war1)or (char2.clan=war2)or (char2.clan=war3)))and not (char2.dead) and not (isMedused(char2))  and not (user.target=char2)and not (previousTarget1=char2)
+then
+begin
+Engine.Settarget(char2);
+if reset1=0 then begin
+previousTarget1:=user.target;       end;
+reset1:=reset1+1;
+if reset1=2 then reset1:=0;
+break;
+end;
+end;
+if (count<3) then begin
+if ( (isContains(list4, char2.classid  ) )
+    and ((char2.attackable) or (char2.clan=war1)or (char2.clan=war2)or (char2.clan=war3)))and not (char2.dead) and not (isMedused(char2))  and not (user.target=char2)
+then
+begin
+Engine.Settarget(char2);
+break;
+end;
+end;
+end;
+end;
+end;
+end;
+(* *********************************************************************************************************************************** *)
+procedure targetList4_2 (p: pointer);        
+var
+keycode,j,i,m,k:integer;
+char2,char3:tl2char;
+previousTarget1,previousTarget2:tl2live;
+begin
+  while engine.status=lsonline do begin    
+    Engine.WaitAction([laKey],keycode,i);
+if (KeyCode = List4B) (* Q *)and eventsid then begin
+count:=1;
+for j := 0 to CharList.count -1 do begin
+Char2 := CharList.Items(j);
+if ( (isContains(list4, char2.classid  ) )
+    and ((char2.attackable)))and not (char2.dead) and not (isMedused(char2))  and not (user.target=char2)
+then
+begin
+count:=count+1;
+end;
+end;
+for j := 0 to CharList.count -1 do begin
+Char2 := CharList.Items(j);
+if (count>2) then begin
+if ( (isContains(list4, char2.classid  ) )
+    and ((char2.attackable)))and not (char2.dead) and not (isMedused(char2))  and not (user.target=char2)and not (previousTarget1=char2)
+then
+begin
+Engine.Settarget(char2);
+if reset1=0 then begin
+previousTarget1:=user.target;       end;
+reset1:=reset1+1;
+if reset1=2 then reset1:=0;
+break;
+end;
+end;
+if (count<3) then begin
+if ( (isContains(list4, char2.classid  ) )
+    and ((char2.attackable)))and not (char2.dead) and not (isMedused(char2))  and not (user.target=char2)
+then
+begin
+Engine.Settarget(char2);
+break;
+end;
+end;
+end;
+end;
+end;
+end;
+(* *********************************************************************************************************************************** *)
+procedure targetList4_3 (p: pointer);        
+var
+keycode,j,i,m,k:integer;
+char2,char3:tl2char;
+previousTarget1,previousTarget2:tl2live;
+begin
+  while engine.status=lsonline do begin    
+    Engine.WaitAction([laKey],keycode,i);
+if (KeyCode = List4B) (* Q *) and not (eventsid) and (blacklistid) then begin
+count:=1;
+for j := 0 to CharList.count -1 do begin
+Char2 := CharList.Items(j);
+if  (isContains(list4, char2.classid)
+    and (char2.ally=blacklistAlly) and not (isContains_2(WhiteList, char2.name)) and not (char2.dead)and not (isMedused(char2))and not (char2.ismember) and not (user.target=char2))
+then
+begin
+count:=count+1;
+end;
+end;
+for j := 0 to CharList.count -1 do begin
+Char2 := CharList.Items(j);
+if (count>2) then begin
+if (isContains(list4, char2.classid  )
+    and (char2.ally=blacklistAlly) and not (isContains_2(WhiteList, char2.name)) and not (char2.dead) and not (isMedused(char2))  and not (user.target=char2)and not (previousTarget1=char2))
+then
+begin
+Engine.Settarget(char2);
+if reset1=0 then begin
+previousTarget1:=user.target;       end;
+reset1:=reset1+1;
+if reset1=2 then reset1:=0;
+break;
+end;
+end;
+if (count<3) then begin
+if ( (isContains(list4, char2.classid))
+    and (char2.ally=blacklistAlly)) and not (isContains_2(WhiteList, char2.name)) and not (char2.dead) and not (isMedused(char2))  and not (user.target=char2)
+then
+begin
+Engine.Settarget(char2);
+break;
+end;
+end;
+end;
+end;
+end;
+end;
+(* *********************************************************************************************************************************** *)
+procedure targetList3 (p: pointer);        
+var
+keycode,j,i,m,k:integer;
+char2,char3:tl2char;
+previousTarget1,previousTarget2:tl2live;
+begin
+  while engine.status=lsonline do begin    
+    Engine.WaitAction([laKey],keycode,i);
+if (KeyCode = List3B) (* Q *)and not eventsid and not blacklistid then begin
+count:=1;
+for j := 0 to CharList.count -1 do begin
+Char2 := CharList.Items(j);
+if ( (isContains(list3, char2.classid  ) )
+    and ((char2.attackable) or (char2.clan=war1)or (char2.clan=war2)or (char2.clan=war3)))and not (char2.dead) and not (isMedused(char2))  and not (user.target=char2)
+then
+begin
+count:=count+1;
+end;
+end;
+for j := 0 to CharList.count -1 do begin
+Char2 := CharList.Items(j);
+if (count>2) then begin
+if ( (isContains(list3, char2.classid  ) )
+    and ((char2.attackable) or (char2.clan=war1)or (char2.clan=war2)or (char2.clan=war3)))and not (char2.dead) and not (isMedused(char2))  and not (user.target=char2)and not (previousTarget1=char2)
+then
+begin
+Engine.Settarget(char2);
+if reset1=0 then begin
+previousTarget1:=user.target;       end;
+reset1:=reset1+1;
+if reset1=2 then reset1:=0;
+break;
+end;
+end;
+if (count<3) then begin
+if ( (isContains(list3, char2.classid  ) )
+    and ((char2.attackable) or (char2.clan=war1)or (char2.clan=war2)or (char2.clan=war3)))and not (char2.dead) and not (isMedused(char2))  and not (user.target=char2)
+then
+begin
+Engine.Settarget(char2);
+break;
+end;
+end;
+end;
+end;
+end;
+end;
+(* *********************************************************************************************************************************** *)
+procedure targetList3_2 (p: pointer);        
+var
+keycode,j,i,m,k:integer;
+char2,char3:tl2char;
+previousTarget1,previousTarget2:tl2live;
+begin
+  while engine.status=lsonline do begin    
+    Engine.WaitAction([laKey],keycode,i);
+if (KeyCode = List3B) (* Q *)and eventsid then begin
+count:=1;
+for j := 0 to CharList.count -1 do begin
+Char2 := CharList.Items(j);
+if ( (isContains(list3, char2.classid  ) )
+    and ((char2.attackable)))and not (char2.dead) and not (isMedused(char2))  and not (user.target=char2)
+then
+begin
+count:=count+1;
+end;
+end;
+for j := 0 to CharList.count -1 do begin
+Char2 := CharList.Items(j);
+if (count>2) then begin
+if ( (isContains(list3, char2.classid  ) )
+    and ((char2.attackable)))and not (char2.dead) and not (isMedused(char2))  and not (user.target=char2)and not (previousTarget1=char2)
+then
+begin
+Engine.Settarget(char2);
+if reset1=0 then begin
+previousTarget1:=user.target;       end;
+reset1:=reset1+1;
+if reset1=2 then reset1:=0;
+break;
+end;
+end;
+if (count<3) then begin
+if ( (isContains(list3, char2.classid  ) )
+    and ((char2.attackable)))and not (char2.dead) and not (isMedused(char2))  and not (user.target=char2)
+then
+begin
+Engine.Settarget(char2);
+break;
+end;
+end;
+end;
+end;
+end;
+end;
+(* *********************************************************************************************************************************** *)
+procedure targetList3_3 (p: pointer);        
+var
+keycode,j,i,m,k:integer;
+char2,char3:tl2char;
+previousTarget1,previousTarget2:tl2live;
+begin
+  while engine.status=lsonline do begin    
+    Engine.WaitAction([laKey],keycode,i);
+if (KeyCode = List3B) (* Q *) and not (eventsid) and (blacklistid) then begin
+count:=1;
+for j := 0 to CharList.count -1 do begin
+Char2 := CharList.Items(j);
+if  (isContains(list3, char2.classid)
+    and (char2.ally=blacklistAlly) and not (isContains_2(WhiteList, char2.name)) and not (char2.dead)and not (isMedused(char2))and not (char2.ismember) and not (user.target=char2))
+then
+begin
+count:=count+1;
+end;
+end;
+for j := 0 to CharList.count -1 do begin
+Char2 := CharList.Items(j);
+if (count>2) then begin
+if (isContains(list3, char2.classid  )
+    and (char2.ally=blacklistAlly) and not (isContains_2(WhiteList, char2.name)) and not (char2.dead) and not (isMedused(char2))  and not (user.target=char2)and not (previousTarget1=char2))
+then
+begin
+Engine.Settarget(char2);
+if reset1=0 then begin
+previousTarget1:=user.target;       end;
+reset1:=reset1+1;
+if reset1=2 then reset1:=0;
+break;
+end;
+end;
+if (count<3) then begin
+if ( (isContains(list3, char2.classid))
+    and (char2.ally=blacklistAlly))and not (isContains_2(WhiteList, char2.name)) and not (char2.dead) and not (isMedused(char2))  and not (user.target=char2)
+then
+begin
+Engine.Settarget(char2);
+break;
+end;
+end;
+end;
+end;
+end;
+end;
+(* *********************************************************************************************************************************** *)
+procedure targetList2 (p: pointer);        
+var
+keycode,j,i,m,k:integer;
+char2,char3:tl2char;
+previousTarget1,previousTarget2:tl2live;
+begin
+  while engine.status=lsonline do begin    
+    Engine.WaitAction([laKey],keycode,i);
+if (KeyCode = List2B) (* Q *)and not eventsid and not blacklistid then begin
+count:=1;
+for j := 0 to CharList.count -1 do begin
+Char2 := CharList.Items(j);
+if ( (isContains(list2, char2.classid  ) )
+    and ((char2.attackable) or (char2.clan=war1)or (char2.clan=war2)or (char2.clan=war3)))and not (char2.dead) and not (isMedused(char2))  and not (user.target=char2)
+then
+begin
+count:=count+1;
+end;
+end;
+for j := 0 to CharList.count -1 do begin
+Char2 := CharList.Items(j);
+if (count>2) then begin
+if ( (isContains(list2, char2.classid  ) )
+    and ((char2.attackable) or (char2.clan=war1)or (char2.clan=war2)or (char2.clan=war3)))and not (char2.dead) and not (isMedused(char2))  and not (user.target=char2)and not (previousTarget1=char2)
+then
+begin
+Engine.Settarget(char2);
+if reset1=0 then begin
+previousTarget1:=user.target;       end;
+reset1:=reset1+1;
+if reset1=2 then reset1:=0;
+break;
+end;
+end;
+if (count<3) then begin
+if ( (isContains(list2, char2.classid  ) )
+    and ((char2.attackable) or (char2.clan=war1)or (char2.clan=war2)or (char2.clan=war3)))and not (char2.dead) and not (isMedused(char2))  and not (user.target=char2)
+then
+begin
+Engine.Settarget(char2);
+break;
+end;
+end;
+end;
+end;
+end;
+end;
+(* *********************************************************************************************************************************** *)
+procedure targetList2_2 (p: pointer);        
+var
+keycode,j,i,m,k:integer;
+char2,char3:tl2char;
+previousTarget1,previousTarget2:tl2live;
+begin
+  while engine.status=lsonline do begin    
+    Engine.WaitAction([laKey],keycode,i);
+if (KeyCode = List2B) (* Q *)and eventsid then begin
+count:=1;
+for j := 0 to CharList.count -1 do begin
+Char2 := CharList.Items(j);
+if ( (isContains(list2, char2.classid  ) )
+    and ((char2.attackable)))and not (char2.dead) and not (isMedused(char2))  and not (user.target=char2)
+then
+begin
+count:=count+1;
+end;
+end;
+for j := 0 to CharList.count -1 do begin
+Char2 := CharList.Items(j);
+if (count>2) then begin
+if ( (isContains(list2, char2.classid  ) )
+    and ((char2.attackable)))and not (char2.dead) and not (isMedused(char2))  and not (user.target=char2)and not (previousTarget1=char2)
+then
+begin
+Engine.Settarget(char2);
+if reset1=0 then begin
+previousTarget1:=user.target;       end;
+reset1:=reset1+1;
+if reset1=2 then reset1:=0;
+break;
+end;
+end;
+if (count<3) then begin
+if ( (isContains(list2, char2.classid  ) )
+    and ((char2.attackable)))and not (char2.dead) and not (isMedused(char2))  and not (user.target=char2)
+then
+begin
+Engine.Settarget(char2);
+break;
+end;
+end;
+end;
+end;
+end;
+end;
+(* *********************************************************************************************************************************** *)
+procedure targetList2_3 (p: pointer);        
+var
+keycode,j,i,m,k:integer;
+char2,char3:tl2char;
+previousTarget1,previousTarget2:tl2live;
+begin
+  while engine.status=lsonline do begin    
+    Engine.WaitAction([laKey],keycode,i);
+if (KeyCode = List2B) (* Q *) and not (eventsid) and (blacklistid) then begin
+count:=1;
+for j := 0 to CharList.count -1 do begin
+Char2 := CharList.Items(j);
+if  (isContains(list2, char2.classid)
+    and (char2.ally=blacklistAlly) and not (isContains_2(WhiteList, char2.name)) and not (char2.dead)and not (isMedused(char2))and not (char2.ismember) and not (user.target=char2))
+then
+begin
+count:=count+1;
+end;
+end;
+for j := 0 to CharList.count -1 do begin
+Char2 := CharList.Items(j);
+if (count>2) then begin
+if (isContains(list2, char2.classid  )
+    and (char2.ally=blacklistAlly) and not (isContains_2(WhiteList, char2.name)) and not (char2.dead) and not (isMedused(char2))  and not (user.target=char2)and not (previousTarget1=char2))
+then
+begin
+Engine.Settarget(char2);
+if reset1=0 then begin
+previousTarget1:=user.target;       end;
+reset1:=reset1+1;
+if reset1=2 then reset1:=0;
+break;
+end;
+end;
+if (count<3) then begin
+if ( (isContains(list2, char2.classid))
+    and (char2.ally=blacklistAlly)) and not (isContains_2(WhiteList, char2.name)) and not (char2.dead) and not (isMedused(char2))  and not (user.target=char2)
+then
+begin
+Engine.Settarget(char2);
+break;
+end;
+end;
+end;
+end;
+end;
+end;
+(* *********************************************************************************************************************************** *)
+procedure targetList1 (p: pointer);        
+var
+keycode,j,i,m,k:integer;
+char2,char3:tl2char;
+previousTarget1,previousTarget2:tl2live;
+begin
+  while engine.status=lsonline do begin    
+    Engine.WaitAction([laKey],keycode,i);
+if (KeyCode = List1B) (* Q *)and not eventsid and not blacklistid then begin
+count:=1;
+for j := 0 to CharList.count -1 do begin
+Char2 := CharList.Items(j);
+if ( (isContains(list1, char2.classid  ) )
+    and ((char2.attackable) or (char2.clan=war1)or (char2.clan=war2)or (char2.clan=war3)))and not (char2.dead) and not (isMedused(char2))  and not (user.target=char2)
+then
+begin
+count:=count+1;
+end;
+end;
+for j := 0 to CharList.count -1 do begin
+Char2 := CharList.Items(j);
+if (count>2) then begin
+if ( (isContains(list1, char2.classid  ) )
+    and ((char2.attackable) or (char2.clan=war1)or (char2.clan=war2)or (char2.clan=war3)))and not (char2.dead) and not (isMedused(char2))  and not (user.target=char2)and not (previousTarget1=char2)
+then
+begin
+Engine.Settarget(char2);
+if reset1=0 then begin
+previousTarget1:=user.target;       end;
+reset1:=reset1+1;
+if reset1=2 then reset1:=0;
+break;
+end;
+end;
+if (count<3) then begin
+if ( (isContains(list1, char2.classid  ) )
+    and ((char2.attackable) or (char2.clan=war1)or (char2.clan=war2)or (char2.clan=war3)))and not (char2.dead) and not (isMedused(char2))  and not (user.target=char2)
+then
+begin
+Engine.Settarget(char2);
+break;
+end;
+end;
+end;
+end;
+end;
+end;
+(* *********************************************************************************************************************************** *)
+procedure targetList1_2 (p: pointer);        
+var
+keycode,j,i,m,k:integer;
+char2,char3:tl2char;
+previousTarget1,previousTarget2:tl2live;
+begin
+  while engine.status=lsonline do begin    
+    Engine.WaitAction([laKey],keycode,i);
+if (KeyCode = List1B) (* Q *)and eventsid then begin
+count:=1;
+for j := 0 to CharList.count -1 do begin
+Char2 := CharList.Items(j);
+if ( (isContains(list1, char2.classid  ) )
+    and ((char2.attackable)))and not (char2.dead) and not (isMedused(char2))  and not (user.target=char2)
+then
+begin
+count:=count+1;
+end;
+end;
+for j := 0 to CharList.count -1 do begin
+Char2 := CharList.Items(j);
+if (count>2) then begin
+if ( (isContains(list1, char2.classid  ) )
+    and ((char2.attackable)))and not (char2.dead) and not (isMedused(char2))  and not (user.target=char2)and not (previousTarget1=char2)
+then
+begin
+Engine.Settarget(char2);
+if reset1=0 then begin
+previousTarget1:=user.target;       end;
+reset1:=reset1+1;
+if reset1=2 then reset1:=0;
+break;
+end;
+end;
+if (count<3) then begin
+if ( (isContains(list1, char2.classid  ) )
+    and ((char2.attackable)))and not (char2.dead) and not (isMedused(char2))  and not (user.target=char2)
+then
+begin
+Engine.Settarget(char2);
+break;
+end;
+end;
+end;
+end;
+end;
+end;
+(* *********************************************************************************************************************************** *)
+procedure targetList1_3 (p: pointer);        
+var
+keycode,j,i,m,k:integer;
+char2,char3:tl2char;
+previousTarget1,previousTarget2:tl2live;
+begin
+  while engine.status=lsonline do begin    
+    Engine.WaitAction([laKey],keycode,i);
+if (KeyCode = List1B) (* Q *) and not (eventsid) and (blacklistid) then begin
+count:=1;
+for j := 0 to CharList.count -1 do begin
+Char2 := CharList.Items(j);
+if  (isContains(list1, char2.classid)
+    and (char2.ally=blacklistAlly) and not (isContains_2(WhiteList, char2.name)) and not (char2.dead)and not (isMedused(char2))and not (char2.ismember) and not (user.target=char2))
+then
+begin
+count:=count+1;
+end;
+end;
+for j := 0 to CharList.count -1 do begin
+Char2 := CharList.Items(j);
+if (count>2) then begin
+if (isContains(list1, char2.classid  )
+    and (char2.ally=blacklistAlly) and not (isContains_2(WhiteList, char2.name)) and not (char2.dead) and not (isMedused(char2))  and not (user.target=char2)and not (previousTarget1=char2))
+then
+begin
+Engine.Settarget(char2);
+if reset1=0 then begin
+previousTarget1:=user.target;       end;
+reset1:=reset1+1;
+if reset1=2 then reset1:=0;
+break;
+end;
+end;
+if (count<3) then begin
+if ( (isContains(list1, char2.classid))
+    and (char2.ally=blacklistAlly)) and not (isContains_2(WhiteList, char2.name)) and not (char2.dead) and not (isMedused(char2))  and not (user.target=char2)
+then
+begin
+Engine.Settarget(char2);
+break;
+end;
+end;
+end;
+end;
+end;
+end;
+(* *********************************************************************************************************************************** *)
+
+procedure hold ;
+var
+charT:tl2live;
+obj:tl2effect;
+
+begin
+ while engine.status = lsonline do begin
+  if (user.target.valid) then if not (User.Buffs.byID(18,obj)) and not (User.Buffs.ByID(28,obj)) then    chart:=user.target;
+  if not user.target.valid   then while not (User.Target.name = chart.name) do Engine.SetTarget(chart.name);
+ delay(100);
+ end;
+end; 
+
+(* *********************************************************************************************************************************** *)
+procedure Reskill;
+  var
+p1,p2:pointer;
+char1 : tl2live;
+  obj: Tl2char;
+  escBtn : boolean;
+  prm1,prm2: pointer;
+  Action : TL2Action;
+begin
+while 
+delay(50) do begin
+Engine.WaitAction([laRevive], p1, p2);
+if  (user.distto(TL2Live(P1))<=reskillRange) then char1:= TL2Live(p1);
+if  ((TL2Live(P1).attackable) or (TL2Live(P1).clan=war1)or (TL2Live(P1).clan=war2)or (TL2Live(P1).clan=war3))and not eventsid and not blacklistid then begin
+//char1:= TL2Live(p1);
+ if charlist.byname(char1.name,obj)  and
+  // 3RD CLASS
+       ((obj.classid=97) (*or (obj.classid=90)*) or (obj.classid=95) or
+        (obj.classid=105) or (obj.classid=112) or (obj.classid=94) or
+        (obj.classid=100) or (obj.classid=103) or (obj.classid=128) or
+        (obj.classid=132) or (obj.classid=129) or (obj.classid=133) or
+        (obj.classid=110) or (obj.classid=134) or (obj.classid=92) (*or
+        (obj.classid=106)*) (*or (obj.classid=91) *)or (obj.classid=109) or
+        (obj.classid=102) or (obj.classid=131) or (obj.classid=93) or
+        (obj.classid=101) or (obj.classid=108) or (obj.classid=88) or
+        (obj.classid=113) or (obj.classid=114) or
+    // 2ND CLASS
+        (obj.classid=2) or (obj.classid=3) (*or (obj.classid=5)*) (*or
+        (obj.classid=6)*) or (obj.classid=8) or (obj.classid=9) or
+        (obj.classid=12) or (obj.classid=13) or (obj.classid=14) or
+        (obj.classid=16) or (obj.classid=17) or (obj.classid=21) or
+        (obj.classid=23) or (obj.classid=24) or (obj.classid=27) or
+        (obj.classid=28) or (obj.classid=30) (*or (obj.classid=33)*) or
+        (obj.classid=34) or (obj.classid=36) or (obj.classid=37) or
+        (obj.classid=40) or (obj.classid=41) or (obj.classid=43) or
+        (obj.classid=46) or (obj.classid=48) or (obj.classid=51) or
+        (obj.classid=52)or (obj.classid=127))
+then begin
+delay(10);
+if ((skillCoolTime(reskillSkill)<>-1) and skillExist(reskillSkill)) then begin 
+  if (User.Cast.EndTime=0) then begin
+  engine.settarget(TL2Live(P1));
+  engine.DUseSkill(reskillSkill, true, true);
+  end
+  else
+  begin
+  Engine.UseKey('Esc');
+  engine.settarget(TL2Live(P1));
+  engine.DUseSkill(reskillSkill, true, true);
+  end;
+end;
+delay(100);
+end;
+end;
+end;
+end;
+(* *********************************************************************************************************************************** *)
+procedure Reskill_2;
+  var
+p1,p2:pointer;
+char1 : tl2live;
+  obj: Tl2char;
+begin
+while 
+delay(50) do begin
+Engine.WaitAction([laRevive], p1, p2);
+if  (user.distto(TL2Live(P1))<=reskillRange) then char1:= TL2Live(p1);
+if  (TL2Live(P1).ally=blacklistAlly) and not (isContains_2(WhiteList, TL2Live(P1).name)) and not eventsid and blacklistid then begin
+//char1:= TL2Live(p1);
+ if charlist.byname(char1.name,obj)  and
+  // 3RD CLASS
+       ((obj.classid=97) (*or (obj.classid=90)*) or (obj.classid=95) or
+        (obj.classid=105) or (obj.classid=112) or (obj.classid=94) or
+        (obj.classid=100) or (obj.classid=103) or (obj.classid=128) or
+        (obj.classid=132) or (obj.classid=129) or (obj.classid=133) or
+        (obj.classid=110) or (obj.classid=134) or (obj.classid=92) (*or
+        (obj.classid=106)*) (*or (obj.classid=91) *)or (obj.classid=109) or
+        (obj.classid=102) or (obj.classid=131) or (obj.classid=93) or
+        (obj.classid=101) or (obj.classid=108) or (obj.classid=88) or
+        (obj.classid=113) or (obj.classid=114) or
+    // 2ND CLASS
+        (obj.classid=2) or (obj.classid=3) (*or (obj.classid=5)*) (*or
+        (obj.classid=6)*) or (obj.classid=8) or (obj.classid=9) or
+        (obj.classid=12) or (obj.classid=13) or (obj.classid=14) or
+        (obj.classid=16) or (obj.classid=17) or (obj.classid=21) or
+        (obj.classid=23) or (obj.classid=24) or (obj.classid=27) or
+        (obj.classid=28) or (obj.classid=30) (*or (obj.classid=33)*) or
+        (obj.classid=34) or (obj.classid=36) or (obj.classid=37) or
+        (obj.classid=40) or (obj.classid=41) or (obj.classid=43) or
+        (obj.classid=46) or (obj.classid=48) or (obj.classid=51) or
+        (obj.classid=52)or (obj.classid=127))
+then begin
+delay(10);
+if ((skillCoolTime(reskillSkill)<>-1) and skillExist(reskillSkill)) then begin 
+  if (User.Cast.EndTime=0) then begin
+  engine.settarget(TL2Live(P1));
+  engine.DUseSkill(reskillSkill, true, true);
+  end
+  else
+  begin
+  Engine.UseKey('Esc');
+  engine.settarget(TL2Live(P1));
+  engine.DUseSkill(reskillSkill, true, true);
+  end;
+end;
+delay(100);
+end;
+end;
+end;
+end;
+(* *********************************************************************************************************************************** *)
+procedure antiHate;
+var
+	i: integer;
+begin
+while Engine.Status = lsOnline do
+begin
+	for i:=0 to Charlist.Count-1 do
+	begin
+	if ((Charlist.Items(i).Target = User) and (Charlist.Items(i).Cast.EndTime > 0) and
+		((Charlist.Items(i).Cast.ID = 28) or (Charlist.Items(i).Cast.ID = 979))) then
+		begin
+			TargetBeforeHate:= User.Target;
+			Delay(Charlist.Items(i).Cast.EndTime + 2700);
+			engine.settarget(TargetBeforeHate);
+		end;
+	end;
+	delay(200);
+end;
+end;
+
+
+
+(* *********************************************************************************************************************************** *)
+procedure antiFear;
+			var
+				i: integer;
+				fearTemp: TL2Effect;
+			begin
+				while Engine.Status = lsOnline do
+					begin
+						for i:=0 to Charlist.Count - 1 do
+							begin
+								if isFearCasting(Charlist.Items(i)) and User.Running  then
+									begin
+											Engine.UseAction(1);
+											delay(fearCastEndTime + 200);
+											if not User.Running and not User.Buffs.ByID(1169, fearTemp) then
+												begin
+													Engine.UseAction(1);
+												end;
+									end
+								else if not User.Running and not isAffraid(User) then
+									begin
+										Engine.UseAction(1);
+									end;
+							end;
+					delay(350);
+					end;
+			end;
+(* *********************************************************************************************************************************** *)
+procedure targetSaver;
+var
+	Action : TL2Action;
+	Prm1, Prm2: pointer;
+begin
+	while Engine.Status = lsOnline do
+	begin
+		Action := engine.WaitAction([latarget], Prm1, Prm2);
+		if Action = latarget then
+		begin
+			if (User.Target <> currentTarget) then
+			begin
+				previousTarget := currentTarget;
+				currentTarget := User.Target;
+			end;
+		end;
+		delay(30);
+	end;
+end; 
+(* *********************************************************************************************************************************** *)		
+procedure holdTarget;
+var
+	prm1, prm2: pointer;
+	Action : TL2Action;
+	escBtn : boolean;
+begin
+	while Engine.Status = lsOnline do
+	begin
+		Action := Engine.WaitAction([laUnTarget, laKey], prm1, prm2);
+		if Action = laUnTarget then
+		begin
+			if not (User.Target = currentTarget) and not escBtn then
+			begin
+				delay(10);
+				Engine.SetTarget(currentTarget); 
+			end; 
+			delay(100);
+			escBtn := false;
+		end;
+		if Action = laKey then
+		begin
+			escBtn := (Integer(prm1) = $1B);
+		end;
+		delay(30);
+	end;
+end;
+(* *********************************************************************************************************************************** *)
+procedure safeCast;
+
+begin
+	while Engine.Status = lsOnline do
+	begin
+	    previousTarget:=user.target;
+			if (User.Cast.EndTime > 0) then
+			begin
+			  Engine.SetTarget('nil'); 
+			end;
+			Engine.SetTarget(previousTarget);
+		end;
+		delay(20);
+	end;
+(* *********************************************************************************************************************************** *)
+
+procedure WarsAroundMeCount (p: pointer);         
+var
+keycode,j,i,m,k:integer;
+char2,char3:tl2char;
+R:integer;
+result,result_1,result_2,result_3:integer;
+
+begin
+  result:= 0;
+  result_1:= 0;
+  result_2:= 0;
+  result_3:= 0;
+  R:= 3200;
+  while engine.status=lsonline do begin     
+    Engine.WaitAction([laKey],keycode,i);
+if (KeyCode = WarB) (* Z *)and not  eventsid and countid then begin   
+for j := 0 to CharList.count -1 do begin
+Char2 := CharList.Items(j);
+if ((char2.clan=war1)or (char2.clan=war2)or (char2.clan=war3))and (User.DistTo(Char2) < R) then begin
+   Inc(result);
+end;
+if ((char2.clan=war1)and (User.DistTo(Char2) < R)) then begin
+   Inc(result_1);
+end;
+if ((char2.clan=war2)and (User.DistTo(Char2) < R)) then begin
+   Inc(result_2);
+end;
+if ((char2.clan=war3)and (User.DistTo(Char2) < R)) then begin
+   Inc(result_3);
+end;
+end;
+Engine.EnterText('#Total number of Wars: '+result.ToString+' people');
+delay(500);
+result := 0;
+Engine.EnterText('#'+war1+' has a number of '+result_1.ToString+' people');
+delay(500);
+result_1 := 0;
+Engine.EnterText('#'+war2+' has a number of '+result_2.ToString+' people');
+delay(500);
+result_2 := 0;
+Engine.EnterText('#'+war3+' has a number of '+result_3.ToString+' people');
+delay(500);
+result_3 := 0;
+delay(1000);
+end;
+end;
+end;
+
+
+
+
+begin
+loadConfig;
+loadSettings;
+script.newthread(@Reskill);
+script.newthread(@Reskill_2);
+script.newthread(@antiHate);
+script.newthread(@Disarm);
+
+script.newthread(@InterruptHigh);
+script.newthread(@InterruptNormal);
+script.newthread(@InterruptLow);
+script.newthread(@SkillList);
+
+script.newthread(@targetList6);
+script.newthread(@targetList6_2);
+script.newthread(@targetList6_3);
+script.newthread(@targetList5);
+script.newthread(@targetList5_2);
+script.newthread(@targetList5_3);
+script.newthread(@targetList4);
+script.newthread(@targetList4_2);
+script.newthread(@targetList4_3);
+script.newthread(@targetList3);
+script.newthread(@targetList3_2);
+script.newthread(@targetList3_3);
+script.newthread(@targetList2);
+script.newthread(@targetList2_2);
+script.newthread(@targetList2_3);
+script.newthread(@targetList1);
+script.newthread(@targetList1_2);
+script.newthread(@targetList1_3);
+script.newthread(@assist);
+
+script.newthread(@Hold);
+script.newthread(@holdtarget);
+script.newthread(@targetSaver);
+script.newthread(@AntiBack);
+//script.newthread(@safeCast);
+
+script.newthread(@WarsAroundMeCount);
+script.newthread(@antiFear);
+
+script.newthread(@cardiStart);
+script.newthread(@WarCount);
+script.newthread(@eventsStart);
+script.newthread(@BlacklistStart);
+script.newthread(@autoTarget);
+script.newthread(@autoTarget2);
+script.newthread(@autoTarget3);
+
+delay(-1)
+end.
